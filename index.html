@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Iron Ledger</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#127947;</text></svg>">
+<style>
+:root{--ground:#EDEFF2;--surface:#FFF;--raise:#F6F7F9;--line:#D3D8E0;--ink:#14161A;--muted:#5C6472;
+--accent:#1F6FEB;--soft:#E4EDFD;--good:#17855A;--goodsoft:#E1F2EA;--bad:#B3261E;--warn:#8A6100}
+@media (prefers-color-scheme:dark){:root{--ground:#14161A;--surface:#1C1F25;--raise:#232830;--line:#2C313A;
+--ink:#E8EAED;--muted:#939AA6;--accent:#4C9AFF;--soft:#1B2A44;--good:#3FBF7F;--goodsoft:#16311F;
+--bad:#FF6B6B;--warn:#E0B341}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-size:17px;line-height:1.45;
+font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+padding-bottom:120px;-webkit-text-size-adjust:100%}
+.wrap{max-width:560px;margin:0 auto;padding:0 12px}
+.topbar{position:sticky;top:0;z-index:20;background:var(--ground);border-bottom:1px solid var(--line);
+padding:8px 0;padding-top:calc(8px + env(safe-area-inset-top))}
+.nav{display:flex;align-items:center;gap:8px}
+.nav button{flex:0 0 auto;min-width:58px;height:50px;border-radius:12px;border:1px solid var(--line);
+background:var(--surface);color:var(--ink);font-size:19px;font-weight:600;cursor:pointer}
+.nav .today{flex:1 1 auto;font-size:12px;letter-spacing:.07em;text-transform:uppercase;
+display:flex;flex-direction:column;gap:1px;line-height:1.15}
+.nav .today b{font-size:15px;letter-spacing:0;text-transform:none}
+#status{text-align:center;font-size:12px;padding:5px 0 0;color:var(--muted);min-height:20px}
+#status.ok{color:var(--good)} #status.err{color:var(--bad);font-weight:650} #status.warn{color:var(--warn)}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.s-head{margin:16px 0 14px}
+.s-eyebrow{margin:0;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.s-head h2{margin:2px 0 0;font-size:38px;line-height:1.02;letter-spacing:-.025em}
+.s-date{margin:3px 0 0;color:var(--muted);font-size:15px}
+.deload{margin:11px 0 0;padding:10px 12px;border-radius:10px;font-size:14px;background:var(--soft);
+border:1px solid var(--line)}
+.ex{background:var(--surface);border:1.5px solid var(--line);border-radius:15px;padding:14px;margin-bottom:12px}
+.ex.done{border-color:var(--good);background:var(--goodsoft)}
+.ex-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ex h3{margin:0;font-size:19px;letter-spacing:-.01em}
+.chip{flex:0 0 auto;font-size:14px;font-weight:700;color:var(--accent);background:var(--soft);
+border-radius:999px;padding:4px 11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ex.done .chip{color:var(--good);background:transparent}
+.cue{margin:5px 0 12px;font-size:14px;color:var(--muted)}
+.entry{display:flex;align-items:center;gap:9px}
+.wt-wrap{position:relative;flex:1 1 auto;display:block}
+.wt-wrap span{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;
+color:var(--muted);pointer-events:none;letter-spacing:.04em}
+input.wt{width:100%;height:58px;border-radius:12px;border:1.5px solid var(--line);background:var(--raise);
+color:var(--ink);text-align:center;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+input.wt.set{border-color:var(--good)}
+.enter{flex:0 0 auto;height:58px;padding:0 20px;border-radius:12px;cursor:pointer;
+border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:17px;font-weight:700}
+.enter.set{background:var(--good);border-color:var(--good)}
+.setlab{display:block;font-size:12px;color:var(--muted);margin:13px 0 7px}
+.setbtns{display:flex;gap:9px}
+.setb{flex:1 1 0;height:60px;border-radius:12px;cursor:pointer;border:2px solid var(--accent);
+background:transparent;color:var(--accent);font-size:22px;font-weight:750;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.setb.on{background:var(--good);border-color:var(--good);color:#fff}
+.video{display:flex;align-items:center;justify-content:center;gap:7px;height:48px;margin-top:11px;
+border-radius:12px;font-size:15px;font-weight:650;text-decoration:none;background:var(--soft);color:var(--accent)}
+.timerbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);
+border-top:1px solid var(--line);padding:9px 12px calc(9px + env(safe-area-inset-bottom))}
+.ti{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.tc{display:flex;flex-direction:column;min-width:104px}
+#clock{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;
+font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1}
+#who{font-size:11.5px;color:var(--muted);height:15px;overflow:hidden}
+#clock.run{color:var(--accent)} #clock.fin{color:var(--good)}
+.tb{display:flex;gap:7px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.tb button{height:46px;padding:0 14px;border-radius:11px;border:1px solid var(--line);background:var(--raise);
+color:var(--ink);font-size:15px;font-weight:650;cursor:pointer;font-variant-numeric:tabular-nums}
+.tb button.stop{border-color:var(--accent);color:var(--accent)}
+.setup{background:var(--surface);border:1.5px solid var(--line);border-radius:15px;padding:16px;margin:18px 0}
+.setup h3{margin:0 0 8px;font-size:19px}
+.setup p{margin:0 0 12px;font-size:14px;color:var(--muted)}
+.setup input{width:100%;height:50px;border-radius:11px;border:1.5px solid var(--line);background:var(--raise);
+color:var(--ink);padding:0 12px;font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.setup button{margin-top:10px;height:50px;width:100%;border-radius:11px;border:none;background:var(--accent);
+color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+.linkbtn{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;
+text-decoration:underline;padding:4px}
+@media (prefers-reduced-motion:no-preference){#clock.run{animation:p 1s ease-in-out infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.72}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="nav">
+      <button type="button" id="prev" aria-label="Previous session">&#9664;</button>
+      <button type="button" class="today" id="jump"><span>Jump to</span><b id="navlab">Today</b></button>
+      <button type="button" id="next" aria-label="Next session">&#9654;</button>
+    </div>
+    <div id="status">&nbsp;</div>
+  </div>
+  <main id="root"></main>
+  <div style="text-align:center;padding:8px 0 20px">
+    <button class="linkbtn" id="settings">Sheet connection</button>
+  </div>
+</div>
+
+<div class="timerbar"><div class="ti">
+  <div class="tc"><div id="clock" aria-live="polite">0:00</div><div id="who"></div></div>
+  <div class="tb">
+    <button type="button" data-t="90">1:30</button>
+    <button type="button" data-t="150">2:30</button>
+    <button type="button" data-t="300">5:00</button>
+    <button type="button" class="stop" id="stopb">Stop</button>
+  </div>
+</div></div>
+
+<script>
+(function () {
+  var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log';
+  var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
+  var root = document.getElementById('root'),
+      navlab = document.getElementById('navlab'),
+      statusEl = document.getElementById('status');
+
+  function endpoint(){ try { return localStorage.getItem(EP_KEY) || ''; } catch(e){ return ''; } }
+  function setEndpoint(v){ try { localStorage.setItem(EP_KEY, v); } catch(e){} }
+  function cacheLog(){ try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); } catch(e){} }
+  function readCache(){ try { return JSON.parse(localStorage.getItem(LOG_KEY) || '{}'); } catch(e){ return {}; } }
+
+  function setStatus(msg, cls){ statusEl.textContent = msg || ' '; statusEl.className = cls || ''; }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function todayISO(){ var d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function idx(iso){ for (var i=0;i<P.sessions.length;i++) if (P.sessions[i].d===iso) return i; return -1; }
+  function nearest(iso){ for (var i=0;i<P.sessions.length;i++) if (P.sessions[i].d>=iso) return P.sessions[i].d;
+    return P.sessions[P.sessions.length-1].d; }
+  function rec(d,n){ if(!LOG[d]) LOG[d]={}; if(!LOG[d][n]) LOG[d][n]={w:'',s:[]}; return LOG[d][n]; }
+
+  function showSetup(){
+    root.innerHTML =
+      '<div class="setup"><h3>Connect your Sheet</h3>' +
+      '<p>Paste the web app URL from your tracker&#39;s Apps Script deployment. ' +
+      'It is stored on this device only, never in the site.</p>' +
+      '<input id="epin" type="url" inputmode="url" autocomplete="off" ' +
+      'placeholder="https://script.google.com/macros/s/..../exec" value="' + esc(endpoint()) + '">' +
+      '<button id="epsave" type="button">Save and connect</button></div>';
+    document.getElementById('epsave').addEventListener('click', function(){
+      var v = document.getElementById('epin').value.trim();
+      if (!v) { setStatus('Paste the /exec URL first','err'); return; }
+      setEndpoint(v); setStatus('Connecting...',''); pull(true);
+    });
+  }
+
+  function render(){
+    if (!endpoint()) { showSetup(); return; }
+    var i = idx(view);
+    if (i < 0) { root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
+    var S = P.sessions[i], D = P.days[S.t], h = '';
+    navlab.textContent = S.t + ' · ' + S.lab;
+    h += '<header class="s-head"><p class="s-eyebrow">Week ' + S.w + (S.dl ? ' · deload' : '') +
+         ' · ' + esc(D.loc) + '</p><h2>' + S.t + '</h2><p class="s-date">' + esc(S.lng) + '</p>' +
+         (S.dl ? '<p class="deload">Deload: same weight, half the sets, 2 to 4 fewer reps.</p>' : '') + '</header>';
+    for (var j=0;j<D.ex.length;j++){
+      var e = D.ex[j], name=e[0], sets=e[1], reps=e[2], rest=e[3], vid=e[4], cue=e[5];
+      var r = rec(S.d, name);
+      var allOn = r.s.length === sets && r.s.every(function(x){ return x; });
+      var mm = Math.floor(rest/60), ss = rest%60, rl = mm + ':' + (ss<10?'0':'') + ss;
+      var btns = '';
+      for (var k=0;k<sets;k++)
+        btns += '<button class="setb' + (r.s[k]?' on':'') + '" data-x="'+j+'" data-k="'+k+'" type="button">' + (k+1) + '</button>';
+      h += '<article class="ex' + (allOn?' done':'') + '">' +
+        '<div class="ex-top"><h3>' + esc(name) + '</h3><span class="chip">' + sets + ' × ' + reps + '</span></div>' +
+        '<p class="cue">' + esc(cue) + '</p>' +
+        '<div class="entry"><label class="wt-wrap"><span>lbs</span>' +
+        '<input class="wt' + (r.w?' set':'') + '" type="text" inputmode="decimal" enterkeyhint="done" ' +
+        'autocomplete="off" aria-label="' + esc(name) + ' weight" data-x="'+j+'" value="' + esc(r.w) + '"></label>' +
+        '<button class="enter' + (r.w?' set':'') + '" type="button" data-x="'+j+'">' + (r.w?'Logged':'Enter') + '</button></div>' +
+        '<span class="setlab">Tap the set you finished. Rest ' + rl + ' starts.</span>' +
+        '<div class="setbtns">' + btns + '</div>' +
+        '<a class="video" href="https://www.youtube.com/watch?v=' + vid + '" target="_blank" rel="noopener">&#9654; Watch form</a>' +
+        '</article>';
+    }
+    root.innerHTML = h;
+  }
+
+  function pull(afterSetup){
+    var ep = endpoint();
+    if (!ep) { showSetup(); return; }
+    setStatus('Loading from Sheet...','');
+    fetch(ep, { method:'GET' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'bad response');
+        LOG = d.log || {}; cacheLog();
+        if (afterSetup) { view = nearest(todayISO()); }
+        render(); setStatus('Synced with Sheet','ok');
+      })
+      .catch(function(err){
+        LOG = readCache();
+        render();
+        setStatus('Sheet unreachable, using this device: ' + String(err.message||err).slice(0,40), 'warn');
+      });
+  }
+
+  function push(date, name){
+    var ep = endpoint(); if (!ep) return;
+    var r = rec(date, name);
+    setStatus('Saving...','');
+    fetch(ep, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ date: date, exercise: name, weight: r.w, sets: r.s })
+    })
+    .then(function(res){ return res.json(); })
+    .then(function(d){
+      if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'rejected');
+      var t = new Date();
+      setStatus('Saved to Sheet ' + t.getHours() + ':' + String(t.getMinutes()).padStart(2,'0'), 'ok');
+    })
+    .catch(function(err){
+      setStatus('SHEET SAVE FAILED (kept on device): ' + String(err.message||err).slice(0,40), 'err');
+    });
+  }
+
+  root.addEventListener('click', function(ev){
+    if (!P) return;
+    var S = P.sessions[idx(view)]; if (!S) return; var D = P.days[S.t];
+    var en = ev.target.closest('.enter');
+    if (en){
+      var xi = +en.dataset.x, inp = root.querySelector('input.wt[data-x="'+xi+'"]');
+      rec(S.d, D.ex[xi][0]).w = inp.value.trim();
+      cacheLog(); render(); push(S.d, D.ex[xi][0]); return;
+    }
+    var sb = ev.target.closest('.setb');
+    if (sb){
+      var x = +sb.dataset.x, k = +sb.dataset.k, e = D.ex[x], r = rec(S.d, e[0]);
+      while (r.s.length < e[1]) r.s.push(0);
+      r.s[k] = r.s[k] ? 0 : 1;
+      if (r.s[k]) startTimer(e[3], e[0] + '  set ' + (k+1));
+      cacheLog(); render(); push(S.d, e[0]);
+    }
+  });
+  root.addEventListener('keydown', function(ev){
+    if (ev.key === 'Enter' && ev.target.classList.contains('wt')){
+      ev.preventDefault();
+      var S = P.sessions[idx(view)], D = P.days[S.t], xi = +ev.target.dataset.x;
+      rec(S.d, D.ex[xi][0]).w = ev.target.value.trim();
+      cacheLog(); render(); push(S.d, D.ex[xi][0]);
+    }
+  });
+
+  function go(iso){ view = iso; render(); window.scrollTo(0,0); }
+  document.getElementById('prev').addEventListener('click', function(){ var i=idx(view); if(i>0) go(P.sessions[i-1].d); });
+  document.getElementById('next').addEventListener('click', function(){ var i=idx(view); if(i<P.sessions.length-1) go(P.sessions[i+1].d); });
+  document.getElementById('jump').addEventListener('click', function(){ go(nearest(todayISO())); });
+  document.getElementById('settings').addEventListener('click', showSetup);
+
+  var clock = document.getElementById('clock'), who = document.getElementById('who');
+  var endAt = null, fired = false, lock = null, ac = null, tlabel = '';
+  function fmt(s){ var n = s<0; s = Math.abs(s);
+    return (n?'-':'') + Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+  function tick(){ if (endAt === null) return;
+    var left = Math.round((endAt - Date.now())/1000);
+    clock.textContent = fmt(left); clock.className = left>0 ? 'run' : 'fin';
+    if (left<=0 && !fired){ fired = true; ding(); }
+    if (left<=-180) stopTimer(); }
+  function wake(){ try { if (navigator.wakeLock && !lock)
+    navigator.wakeLock.request('screen').then(function(l){ lock=l;
+      l.addEventListener('release', function(){ lock=null; }); }).catch(function(){}); } catch(e){} }
+  function beep(){ try {
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    var o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination);
+    o.frequency.value = 680; g.gain.value = 0.0001;
+    g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+0.6);
+    o.start(); o.stop(ac.currentTime+0.6); } catch(e){} }
+  function ding(){ beep(); if (navigator.vibrate) navigator.vibrate([200,100,200,100,300]);
+    try { if (window.Notification && Notification.permission === 'granted')
+      new Notification('Rest over', { body: tlabel || 'Back to work.' }); } catch(e){} }
+  function startTimer(sec, name){
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch(e){}
+    endAt = Date.now() + sec*1000; fired = false; tlabel = name || '';
+    who.textContent = tlabel; wake(); beep(); tick(); }
+  function stopTimer(){ endAt = null; fired = false; tlabel = '';
+    clock.textContent = '0:00'; clock.className = ''; who.textContent = '';
+    try { if (lock){ lock.release(); lock = null; } } catch(e){} }
+  setInterval(tick, 250);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden){ tick(); if (endAt!==null) wake(); } });
+  window.addEventListener('focus', tick); window.addEventListener('pageshow', tick);
+  document.querySelectorAll('.tb button[data-t]').forEach(function(b){
+    b.addEventListener('click', function(){ startTimer(+b.dataset.t, ''); }); });
+  document.getElementById('stopb').addEventListener('click', stopTimer);
+
+  fetch('program.json').then(function(r){ return r.json(); }).then(function(p){
+    P = p; view = nearest(todayISO()); LOG = readCache(); render();
+    if (endpoint()) pull(false); else setStatus('Not connected to your Sheet yet','warn');
+  }).catch(function(err){
+    root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--bad)">Could not load program.json</p>';
+  });
+})();
+</script>
+</body>
+</html>
