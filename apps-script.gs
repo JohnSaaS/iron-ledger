@@ -21,9 +21,11 @@ function sheet_() {
   return sh;
 }
 
+var _scriptTimeZone = null;
 function iso_(v) {
   if (v instanceof Date) {
-    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (!_scriptTimeZone) _scriptTimeZone = Session.getScriptTimeZone();
+    return Utilities.formatDate(v, _scriptTimeZone, 'yyyy-MM-dd');
   }
   return String(v || '').trim();
 }
