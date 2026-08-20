@@ -20,6 +20,15 @@ A push/pull/legs training log built for one-handed use in a gym.
 
 The URL is stored in your browser only. It is never committed here.
 
+## Phone Access & Offline Mode
+
+Iron Ledger is a true Progressive Web App (PWA) with offline capabilities.
+
+1. Host these files anywhere (GitHub Pages, Netlify, Vercel, or a local server).
+2. Open the URL in Safari (iOS) or Chrome (Android).
+3. Tap **Share** > **Add to Home Screen** (iOS) or **Install App** (Android).
+4. The app will now open full-screen and work offline! If you log a workout without an internet connection, it saves locally and syncs back to your Google Sheet automatically once your connection is restored.
+
 ## Files
 
 | File | Purpose |
