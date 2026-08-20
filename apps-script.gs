@@ -8,6 +8,9 @@
  */
 
 var SHEET_NAME = 'APP LOG';
+// 1. Change this to a random secret (e.g. "my-super-secret-123")
+// 2. You will need to enter this in the app along with your URL.
+var SECRET_TOKEN = 'CHANGE_ME';
 
 function sheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -33,8 +36,11 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function doGet() {
+function doGet(e) {
   try {
+    if (SECRET_TOKEN === 'CHANGE_ME') return json_({ ok: false, error: 'SECRET_TOKEN not configured in Apps Script' });
+    if (!e || !e.parameter || e.parameter.token !== SECRET_TOKEN) return json_({ ok: false, error: 'invalid token' });
+
     var vals = sheet_().getDataRange().getValues();
     var log = {};
     for (var i = 1; i < vals.length; i++) {
@@ -56,7 +62,11 @@ function doGet() {
 
 function doPost(e) {
   try {
+    if (SECRET_TOKEN === 'CHANGE_ME') return json_({ ok: false, error: 'SECRET_TOKEN not configured in Apps Script' });
+
     var body = JSON.parse(e.postData.contents);
+    if (body.token !== SECRET_TOKEN) return json_({ ok: false, error: 'invalid token' });
+
     var sh = sheet_();
     var vals = sh.getDataRange().getValues();
     var date = String(body.date || '').trim();

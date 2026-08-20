@@ -11,14 +11,15 @@ A push/pull/legs training log built for one-handed use in a gym.
 ## Setup
 
 1. Open your tracker spreadsheet, then Extensions > Apps Script
-2. Replace everything with the contents of `apps-script.gs`, save
-3. Deploy > New deployment > Web app
+2. Replace everything with the contents of `apps-script.gs`
+3. Edit line 11 of `apps-script.gs` and change the `SECRET_TOKEN` to a random, hard to guess password. Save the file.
+4. Deploy > New deployment > Web app
    - Execute as: **Me**
    - Who has access: **Anyone**
-4. Copy the `/exec` URL
-5. Open the app, tap **Sheet connection**, paste the URL, save
+5. Copy the `/exec` URL
+6. Open the app, tap **Sheet connection**, paste the URL and your secret token, then save
 
-The URL is stored in your browser only. It is never committed here.
+The URL and your secret token are stored in your browser only. They are never committed here.
 
 ## Files
 
