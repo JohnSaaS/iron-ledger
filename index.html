@@ -152,34 +152,43 @@ text-decoration:underline;padding:4px}
     });
   }
 
+  function renderHeader(S, D) {
+    return '<header class="s-head"><p class="s-eyebrow">Week ' + S.w + (S.dl ? ' · deload' : '') +
+         ' · ' + esc(D.loc) + '</p><h2>' + S.t + '</h2><p class="s-date">' + esc(S.lng) + '</p>' +
+         (S.dl ? '<p class="deload">Deload: same weight, half the sets, 2 to 4 fewer reps.</p>' : '') + '</header>';
+  }
+
+  function renderExercise(e, j, r) {
+    var name=e[0], sets=e[1], reps=e[2], rest=e[3], vid=e[4], cue=e[5];
+    var allOn = r.s.length === sets && r.s.every(function(x){ return x; });
+    var mm = Math.floor(rest/60), ss = rest%60, rl = mm + ':' + (ss<10?'0':'') + ss;
+    var btns = '';
+    for (var k=0;k<sets;k++)
+      btns += '<button class="setb' + (r.s[k]?' on':'') + '" data-x="'+j+'" data-k="'+k+'" type="button">' + (k+1) + '</button>';
+    return '<article class="ex' + (allOn?' done':'') + '">' +
+      '<div class="ex-top"><h3>' + esc(name) + '</h3><span class="chip">' + sets + ' × ' + reps + '</span></div>' +
+      '<p class="cue">' + esc(cue) + '</p>' +
+      '<div class="entry"><label class="wt-wrap"><span>lbs</span>' +
+      '<input class="wt' + (r.w?' set':'') + '" type="text" inputmode="decimal" enterkeyhint="done" ' +
+      'autocomplete="off" aria-label="' + esc(name) + ' weight" data-x="'+j+'" value="' + esc(r.w) + '"></label>' +
+      '<button class="enter' + (r.w?' set':'') + '" type="button" data-x="'+j+'">' + (r.w?'Logged':'Enter') + '</button></div>' +
+      '<span class="setlab">Tap the set you finished. Rest ' + rl + ' starts.</span>' +
+      '<div class="setbtns">' + btns + '</div>' +
+      '<a class="video" href="https://www.youtube.com/watch?v=' + vid + '" target="_blank" rel="noopener">&#9654; Watch form</a>' +
+      '</article>';
+  }
+
   function render(){
     if (!endpoint()) { showSetup(); return; }
     var i = idx(view);
     if (i < 0) { root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
     var S = P.sessions[i], D = P.days[S.t], h = '';
     navlab.textContent = S.t + ' · ' + S.lab;
-    h += '<header class="s-head"><p class="s-eyebrow">Week ' + S.w + (S.dl ? ' · deload' : '') +
-         ' · ' + esc(D.loc) + '</p><h2>' + S.t + '</h2><p class="s-date">' + esc(S.lng) + '</p>' +
-         (S.dl ? '<p class="deload">Deload: same weight, half the sets, 2 to 4 fewer reps.</p>' : '') + '</header>';
+    h += renderHeader(S, D);
     for (var j=0;j<D.ex.length;j++){
-      var e = D.ex[j], name=e[0], sets=e[1], reps=e[2], rest=e[3], vid=e[4], cue=e[5];
+      var e = D.ex[j], name=e[0];
       var r = rec(S.d, name);
-      var allOn = r.s.length === sets && r.s.every(function(x){ return x; });
-      var mm = Math.floor(rest/60), ss = rest%60, rl = mm + ':' + (ss<10?'0':'') + ss;
-      var btns = '';
-      for (var k=0;k<sets;k++)
-        btns += '<button class="setb' + (r.s[k]?' on':'') + '" data-x="'+j+'" data-k="'+k+'" type="button">' + (k+1) + '</button>';
-      h += '<article class="ex' + (allOn?' done':'') + '">' +
-        '<div class="ex-top"><h3>' + esc(name) + '</h3><span class="chip">' + sets + ' × ' + reps + '</span></div>' +
-        '<p class="cue">' + esc(cue) + '</p>' +
-        '<div class="entry"><label class="wt-wrap"><span>lbs</span>' +
-        '<input class="wt' + (r.w?' set':'') + '" type="text" inputmode="decimal" enterkeyhint="done" ' +
-        'autocomplete="off" aria-label="' + esc(name) + ' weight" data-x="'+j+'" value="' + esc(r.w) + '"></label>' +
-        '<button class="enter' + (r.w?' set':'') + '" type="button" data-x="'+j+'">' + (r.w?'Logged':'Enter') + '</button></div>' +
-        '<span class="setlab">Tap the set you finished. Rest ' + rl + ' starts.</span>' +
-        '<div class="setbtns">' + btns + '</div>' +
-        '<a class="video" href="https://www.youtube.com/watch?v=' + vid + '" target="_blank" rel="noopener">&#9654; Watch form</a>' +
-        '</article>';
+      h += renderExercise(e, j, r);
     }
     root.innerHTML = h;
   }
