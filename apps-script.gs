@@ -68,6 +68,12 @@ function doPost(e) {
       if (iso_(vals[i][0]) === date && String(vals[i][1] || '').trim() === ex) { row = i + 1; break; }
     }
     var rec = [date, ex, String(body.weight || ''), (body.sets || []).join(','), new Date()];
+    rec = rec.map(function(v) {
+      if (typeof v === 'string' && /^[=+\-@]/.test(v)) {
+        return "'" + v;
+      }
+      return v;
+    });
     if (row > 0) sh.getRange(row, 1, 1, 5).setValues([rec]);
     else sh.appendRow(rec);
     return json_({ ok: true });
