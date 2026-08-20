@@ -116,7 +116,7 @@ text-decoration:underline;padding:4px}
 
 <script>
 (function () {
-  var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log';
+  var EP_KEY = 'ledger_endpoint', TOKEN_KEY = 'ledger_token', LOG_KEY = 'ledger_log';
   var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
   var root = document.getElementById('root'),
       navlab = document.getElementById('navlab'),
@@ -124,6 +124,8 @@ text-decoration:underline;padding:4px}
 
   function endpoint(){ try { return localStorage.getItem(EP_KEY) || ''; } catch(e){ return ''; } }
   function setEndpoint(v){ try { localStorage.setItem(EP_KEY, v); } catch(e){} }
+  function token(){ try { return localStorage.getItem(TOKEN_KEY) || ''; } catch(e){ return ''; } }
+  function setToken(v){ try { localStorage.setItem(TOKEN_KEY, v); } catch(e){} }
   function cacheLog(){ try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); } catch(e){} }
   function readCache(){ try { return JSON.parse(localStorage.getItem(LOG_KEY) || '{}'); } catch(e){ return {}; } }
 
@@ -140,20 +142,24 @@ text-decoration:underline;padding:4px}
   function showSetup(){
     root.innerHTML =
       '<div class="setup"><h3>Connect your Sheet</h3>' +
-      '<p>Paste the web app URL from your tracker&#39;s Apps Script deployment. ' +
-      'It is stored on this device only, never in the site.</p>' +
+      '<p>Paste the web app URL and your secret token from your tracker&#39;s Apps Script deployment. ' +
+      'They are stored on this device only, never in the site.</p>' +
       '<input id="epin" type="url" inputmode="url" autocomplete="off" ' +
-      'placeholder="https://script.google.com/macros/s/..../exec" value="' + esc(endpoint()) + '">' +
+      'placeholder="https://script.google.com/macros/s/..../exec" value="' + esc(endpoint()) + '" style="margin-bottom:8px">' +
+      '<input id="tokin" type="password" autocomplete="off" ' +
+      'placeholder="Secret Token" value="' + esc(token()) + '">' +
       '<button id="epsave" type="button">Save and connect</button></div>';
     document.getElementById('epsave').addEventListener('click', function(){
       var v = document.getElementById('epin').value.trim();
+      var t = document.getElementById('tokin').value.trim();
       if (!v) { setStatus('Paste the /exec URL first','err'); return; }
-      setEndpoint(v); setStatus('Connecting...',''); pull(true);
+      if (!t) { setStatus('Enter your secret token','err'); return; }
+      setEndpoint(v); setToken(t); setStatus('Connecting...',''); pull(true);
     });
   }
 
   function render(){
-    if (!endpoint()) { showSetup(); return; }
+    if (!endpoint() || !token()) { showSetup(); return; }
     var i = idx(view);
     if (i < 0) { root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
     var S = P.sessions[i], D = P.days[S.t], h = '';
@@ -186,9 +192,11 @@ text-decoration:underline;padding:4px}
 
   function pull(afterSetup){
     var ep = endpoint();
-    if (!ep) { showSetup(); return; }
+    var t = token();
+    if (!ep || !t) { showSetup(); return; }
     setStatus('Loading from Sheet...','');
-    fetch(ep, { method:'GET' })
+    var sep = ep.indexOf('?') === -1 ? '?' : '&';
+    fetch(ep + sep + 'token=' + encodeURIComponent(t), { method:'GET' })
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'bad response');
@@ -204,13 +212,15 @@ text-decoration:underline;padding:4px}
   }
 
   function push(date, name){
-    var ep = endpoint(); if (!ep) return;
+    var ep = endpoint();
+    var t = token();
+    if (!ep || !t) return;
     var r = rec(date, name);
     setStatus('Saving...','');
     fetch(ep, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ date: date, exercise: name, weight: r.w, sets: r.s })
+      body: JSON.stringify({ token: t, date: date, exercise: name, weight: r.w, sets: r.s })
     })
     .then(function(res){ return res.json(); })
     .then(function(d){
@@ -295,7 +305,7 @@ text-decoration:underline;padding:4px}
 
   fetch('program.json').then(function(r){ return r.json(); }).then(function(p){
     P = p; view = nearest(todayISO()); LOG = readCache(); render();
-    if (endpoint()) pull(false); else setStatus('Not connected to your Sheet yet','warn');
+    if (endpoint() && token()) pull(false); else setStatus('Not connected to your Sheet yet','warn');
   }).catch(function(err){
     root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--bad)">Could not load program.json</p>';
   });
