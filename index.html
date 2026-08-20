@@ -262,7 +262,8 @@ text-decoration:underline;padding:4px}
     return (n?'-':'') + Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
   function tick(){ if (endAt === null) return;
     var left = Math.round((endAt - Date.now())/1000);
-    clock.textContent = fmt(left); clock.className = left>0 ? 'run' : 'fin';
+    var f = fmt(left); if (clock.textContent !== f) clock.textContent = f;
+    var c = left>0 ? 'run' : 'fin'; if (clock.className !== c) clock.className = c;
     if (left<=0 && !fired){ fired = true; ding(); }
     if (left<=-180) stopTimer(); }
   function wake(){ try { if (navigator.wakeLock && !lock)
