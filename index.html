@@ -7,7 +7,9 @@
 <meta name="theme-color" content="#14161A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#127947;</text></svg>">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.json">
 <style>
 :root{--ground:#EDEFF2;--surface:#FFF;--raise:#F6F7F9;--line:#D3D8E0;--ink:#14161A;--muted:#5C6472;
 --accent:#1F6FEB;--soft:#E4EDFD;--good:#17855A;--goodsoft:#E1F2EA;--bad:#B3261E;--warn:#8A6100}
@@ -116,7 +118,7 @@ text-decoration:underline;padding:4px}
 
 <script>
 (function () {
-  var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log';
+  var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log', PEND_KEY = 'ledger_pending';
   var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
   var root = document.getElementById('root'),
       navlab = document.getElementById('navlab'),
@@ -126,6 +128,8 @@ text-decoration:underline;padding:4px}
   function setEndpoint(v){ try { localStorage.setItem(EP_KEY, v); } catch(e){} }
   function cacheLog(){ try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); } catch(e){} }
   function readCache(){ try { return JSON.parse(localStorage.getItem(LOG_KEY) || '{}'); } catch(e){ return {}; } }
+  function readPending(){ try { return JSON.parse(localStorage.getItem(PEND_KEY) || '[]'); } catch(e){ return []; } }
+  function writePending(q){ try { localStorage.setItem(PEND_KEY, JSON.stringify(q)); } catch(e){} }
 
   function setStatus(msg, cls){ statusEl.textContent = msg || ' '; statusEl.className = cls || ''; }
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -184,28 +188,79 @@ text-decoration:underline;padding:4px}
     root.innerHTML = h;
   }
 
+  function flushPending(){
+    var ep = endpoint(); if (!ep) return Promise.resolve();
+    var q = readPending(); if (q.length === 0) return Promise.resolve();
+    setStatus('Syncing offline changes...','');
+    var p = Promise.resolve();
+    q.forEach(function(item) {
+      p = p.then(function() {
+        return fetch(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(item)
+        }).then(function(res){ return res.json(); }).then(function(d){
+          if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'rejected');
+          var nq = readPending();
+          // Remove the successfully sent item
+          var filtered = nq.filter(function(x) { return x.date !== item.date || x.exercise !== item.exercise || x.timestamp !== item.timestamp; });
+          writePending(filtered);
+        });
+      });
+    });
+    return p.then(function(){
+      setStatus('Offline changes synced','ok');
+    }).catch(function(err){
+      setStatus('Could not sync offline changes','warn');
+    });
+  }
+
+  function mergeLog(remoteLog) {
+    var q = readPending();
+    LOG = remoteLog || {};
+    // Apply pending offline edits on top of the remote state
+    q.forEach(function(item) {
+      if(!LOG[item.date]) LOG[item.date]={};
+      LOG[item.date][item.exercise] = {w: item.weight, s: item.sets};
+    });
+    cacheLog();
+  }
+
   function pull(afterSetup){
     var ep = endpoint();
     if (!ep) { showSetup(); return; }
     setStatus('Loading from Sheet...','');
-    fetch(ep, { method:'GET' })
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'bad response');
-        LOG = d.log || {}; cacheLog();
-        if (afterSetup) { view = nearest(todayISO()); }
-        render(); setStatus('Synced with Sheet','ok');
-      })
-      .catch(function(err){
-        LOG = readCache();
-        render();
-        setStatus('Sheet unreachable, using this device: ' + String(err.message||err).slice(0,40), 'warn');
-      });
+
+    // First try to flush any pending changes
+    flushPending().then(function(){
+      return fetch(ep, { method:'GET' })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'bad response');
+          mergeLog(d.log);
+          if (afterSetup) { view = nearest(todayISO()); }
+          render(); setStatus('Synced with Sheet','ok');
+        });
+    }).catch(function(err){
+      LOG = readCache();
+      render();
+      setStatus('Sheet unreachable, using this device: ' + String(err.message||err).slice(0,40), 'warn');
+    });
   }
 
   function push(date, name){
-    var ep = endpoint(); if (!ep) return;
     var r = rec(date, name);
+    var item = { date: date, exercise: name, weight: r.w, sets: r.s, timestamp: Date.now() };
+    var q = readPending();
+    // Overwrite existing pending item for this date/exercise if present
+    var idx = -1;
+    for (var i=0; i<q.length; i++) {
+      if (q[i].date === date && q[i].exercise === name) { idx = i; break; }
+    }
+    if (idx >= 0) q[idx] = item; else q.push(item);
+    writePending(q);
+
+    var ep = endpoint(); if (!ep) return;
     setStatus('Saving...','');
     fetch(ep, {
       method: 'POST',
@@ -215,11 +270,16 @@ text-decoration:underline;padding:4px}
     .then(function(res){ return res.json(); })
     .then(function(d){
       if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'rejected');
+      // Remove from pending queue since it succeeded
+      var nq = readPending();
+      var filtered = nq.filter(function(x) { return x.date !== date || x.exercise !== name || x.timestamp !== item.timestamp; });
+      writePending(filtered);
+
       var t = new Date();
       setStatus('Saved to Sheet ' + t.getHours() + ':' + String(t.getMinutes()).padStart(2,'0'), 'ok');
     })
     .catch(function(err){
-      setStatus('SHEET SAVE FAILED (kept on device): ' + String(err.message||err).slice(0,40), 'err');
+      setStatus('Saved locally. Will sync later.', 'warn');
     });
   }
 
@@ -289,16 +349,34 @@ text-decoration:underline;padding:4px}
   setInterval(tick, 250);
   document.addEventListener('visibilitychange', function(){ if (!document.hidden){ tick(); if (endAt!==null) wake(); } });
   window.addEventListener('focus', tick); window.addEventListener('pageshow', tick);
+  window.addEventListener('online', function(){
+    if (endpoint()) {
+      setStatus('Back online, syncing...','');
+      pull(false);
+    }
+  });
   document.querySelectorAll('.tb button[data-t]').forEach(function(b){
     b.addEventListener('click', function(){ startTimer(+b.dataset.t, ''); }); });
   document.getElementById('stopb').addEventListener('click', stopTimer);
 
   fetch('program.json').then(function(r){ return r.json(); }).then(function(p){
-    P = p; view = nearest(todayISO()); LOG = readCache(); render();
+    P = p; view = nearest(todayISO()); LOG = readCache();
+    mergeLog(LOG); // Ensure pending offline changes are applied on top of the cached log
+    render();
     if (endpoint()) pull(false); else setStatus('Not connected to your Sheet yet','warn');
   }).catch(function(err){
     root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--bad)">Could not load program.json</p>';
   });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./sw.js').then(function(registration) {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      }).catch(function(err) {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+    });
+  }
 })();
 </script>
 </body>
