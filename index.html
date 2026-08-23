@@ -120,6 +120,7 @@ text-decoration:underline;padding:4px}
 (function () {
   var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log', PEND_KEY = 'ledger_pending';
   var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
+  var shownDay = null, shownType = null, sent = {};
   var root = document.getElementById('root'),
       navlab = document.getElementById('navlab'),
       statusEl = document.getElementById('status');
@@ -141,7 +142,23 @@ text-decoration:underline;padding:4px}
     return P.sessions[P.sessions.length-1].d; }
   function rec(d,n){ if(!LOG[d]) LOG[d]={}; if(!LOG[d][n]) LOG[d][n]={w:'',s:[]}; return LOG[d][n]; }
 
+  // The DOM is rebuilt wholesale on every render, so anything typed into a weight
+  // box but not yet committed dies with it. Sweep those values into LOG first.
+  function harvest(){
+    var out = { day: shownDay, names: [] };
+    if (!P || shownDay === null) return out;
+    var D = P.days[shownType]; if (!D) return out;
+    var inputs = root.querySelectorAll('input.wt');
+    for (var i=0;i<inputs.length;i++){
+      var xi = +inputs[i].dataset.x; if (!D.ex[xi]) continue;
+      var name = D.ex[xi][0], v = inputs[i].value.trim(), r = rec(shownDay, name);
+      if (r.w !== v){ r.w = v; out.names.push(name); }
+    }
+    return out;
+  }
+
   function showSetup(){
+    shownDay = null;
     root.innerHTML =
       '<div class="setup"><h3>Connect your Sheet</h3>' +
       '<p>Paste the web app URL from your tracker&#39;s Apps Script deployment. ' +
@@ -157,9 +174,11 @@ text-decoration:underline;padding:4px}
   }
 
   function render(){
+    var carried = harvest();
+    if (carried.names.length) cacheLog();
     if (!endpoint()) { showSetup(); return; }
     var i = idx(view);
-    if (i < 0) { root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
+    if (i < 0) { shownDay = null; root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
     var S = P.sessions[i], D = P.days[S.t], h = '';
     navlab.textContent = S.t + ' · ' + S.lab;
     h += '<header class="s-head"><p class="s-eyebrow">Week ' + S.w + (S.dl ? ' · deload' : '') +
@@ -186,6 +205,8 @@ text-decoration:underline;padding:4px}
         '</article>';
     }
     root.innerHTML = h;
+    shownDay = S.d; shownType = S.t;
+    for (var c=0;c<carried.names.length;c++) push(carried.day, carried.names[c]);
   }
 
   function flushPending(){
@@ -250,6 +271,9 @@ text-decoration:underline;padding:4px}
 
   function push(date, name){
     var r = rec(date, name);
+    var key = date + '|' + name, sig = r.w + '|' + r.s.join(',');
+    if (sent[key] === sig) return;   // same payload as the last send for this row, nothing changed
+    sent[key] = sig;
     var item = { date: date, exercise: name, weight: r.w, sets: r.s, timestamp: Date.now() };
     var q = readPending();
     // Overwrite existing pending item for this date/exercise if present

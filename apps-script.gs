@@ -22,7 +22,7 @@ function sheet_() {
 }
 
 function iso_(v) {
-  if (v instanceof Date) {
+  if (v && typeof v.getTime === 'function') {
     return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   }
   return String(v || '').trim();
