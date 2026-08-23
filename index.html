@@ -423,6 +423,12 @@ text-decoration:underline;padding:4px}
   function wake(){ try { if (navigator.wakeLock && !lock)
     navigator.wakeLock.request('screen').then(function(l){ lock=l;
       l.addEventListener('release', function(){ lock=null; }); }).catch(function(){}); } catch(e){} }
+  function unlock(){ try {
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    var b = ac.createBuffer(1, 1, 22050), src = ac.createBufferSource();
+    src.buffer = b; src.connect(ac.destination); src.start(0);   // silent, just unlocks
+  } catch(e){} }
   function beep(){ try {
     ac = ac || new (window.AudioContext||window.webkitAudioContext)();
     if (ac.state === 'suspended') ac.resume();
@@ -437,7 +443,7 @@ text-decoration:underline;padding:4px}
   function startTimer(sec, name){
     try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch(e){}
     endAt = Date.now() + sec*1000; fired = false; tlabel = name || '';
-    who.textContent = tlabel; wake(); beep(); tick(); }
+    who.textContent = tlabel; wake(); unlock(); tick(); }
   function stopTimer(){ endAt = null; fired = false; tlabel = '';
     clock.textContent = '0:00'; clock.className = ''; who.textContent = '';
     try { if (lock){ lock.release(); lock = null; } } catch(e){} }
