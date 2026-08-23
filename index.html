@@ -54,6 +54,7 @@ input.wt{width:100%;height:58px;border-radius:12px;border:1.5px solid var(--line
 color:var(--ink);text-align:center;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;
 font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 input.wt.set{border-color:var(--good)}
+input.wt::placeholder{font-size:15px;font-weight:600;color:var(--muted);opacity:1}
 .enter{flex:0 0 auto;height:58px;padding:0 20px;border-radius:12px;cursor:pointer;
 border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:17px;font-weight:700}
 .enter.set{background:var(--good);border-color:var(--good)}
@@ -153,6 +154,15 @@ text-decoration:underline;padding:4px}
   function idx(iso){ for (var i=0;i<P.sessions.length;i++) if (P.sessions[i].d===iso) return i; return -1; }
   function nearest(iso){ for (var i=0;i<P.sessions.length;i++) if (P.sessions[i].d>=iso) return P.sessions[i].d;
     return P.sessions[P.sessions.length-1].d; }
+  function prevWeight(day, name){
+    var best = null;
+    for (var d in LOG){
+      if (d >= day) continue;
+      var e = LOG[d][name];
+      if (e && e.w !== '' && e.w != null && (best === null || d > best.d)) best = { d: d, w: e.w };
+    }
+    return best;
+  }
   function rec(d,n){ if(!LOG[d]) LOG[d]={}; if(!LOG[d][n]) LOG[d][n]={w:'',s:[]}; return LOG[d][n]; }
 
   // The DOM is rebuilt wholesale on every render, so anything typed into a weight
@@ -202,6 +212,8 @@ text-decoration:underline;padding:4px}
       var r = rec(S.d, name);
       var allOn = r.s.length === sets && r.s.every(function(x){ return x; });
       var mm = Math.floor(rest/60), ss = rest%60, rl = mm + ':' + (ss<10?'0':'') + ss;
+      var prev = r.w ? null : prevWeight(S.d, name);
+      var hint = prev ? ' placeholder="' + esc(prev.w) + ' last time" data-prev="' + esc(prev.w) + '"' : '';
       var warm = '';
       if (j === 0){
         var wn = parseFloat(r.w), hasW = !isNaN(wn) && wn > 0;
@@ -226,7 +238,7 @@ text-decoration:underline;padding:4px}
         '<p class="cue">' + esc(cue) + '</p>' +
         '<div class="entry"><label class="wt-wrap"><span>lbs</span>' +
         '<input class="wt' + (r.w?' set':'') + '" type="text" inputmode="decimal" enterkeyhint="done" ' +
-        'autocomplete="off" aria-label="' + esc(name) + ' weight" data-x="'+j+'" value="' + esc(r.w) + '"></label>' +
+        'autocomplete="off" aria-label="' + esc(name) + ' weight" data-x="'+j+'"' + hint + ' value="' + esc(r.w) + '"></label>' +
         '<button class="enter' + (r.w?' set':'') + '" type="button" data-x="'+j+'">' + (r.w?'Logged':'Enter') + '</button></div>' +
         warm +
         '<span class="setlab">Tap the set you finished. Rest ' + rl + ' starts.</span>' +
@@ -360,6 +372,13 @@ text-decoration:underline;padding:4px}
       r.s[k] = r.s[k] ? 0 : 1;
       if (r.s[k]) startTimer(e[3], e[0] + '  set ' + (k+1));
       cacheLog(); render(); push(S.d, e[0]);
+    }
+  });
+  root.addEventListener('focusin', function(ev){
+    var t = ev.target;
+    if (t && t.classList && t.classList.contains('wt') && !t.value && t.dataset.prev){
+      t.value = t.dataset.prev;
+      try { t.select(); } catch(e){}
     }
   });
   root.addEventListener('keydown', function(ev){
