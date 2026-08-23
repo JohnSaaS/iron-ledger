@@ -57,6 +57,18 @@ input.wt.set{border-color:var(--good)}
 .enter{flex:0 0 auto;height:58px;padding:0 20px;border-radius:12px;cursor:pointer;
 border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:17px;font-weight:700}
 .enter.set{background:var(--good);border-color:var(--good)}
+.warm{margin:12px 0 0;padding:11px 12px;border-radius:11px;background:var(--raise);border:1px solid var(--line)}
+.warm .warmlab{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;letter-spacing:.05em;
+text-transform:uppercase;line-height:1.3}
+.warmb{display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;height:46px;
+margin-bottom:7px;padding:0 13px;border-radius:10px;cursor:pointer;border:1.5px solid var(--line);
+background:var(--surface);color:var(--ink);font-size:16px;font-weight:650;
+font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.warmb.on{border-color:var(--good);background:var(--goodsoft);color:var(--good)}
+.warmb em{font-style:normal;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;
+text-transform:uppercase;font-family:ui-sans-serif,system-ui,sans-serif}
+.warmb.on em{color:var(--good)}
+.warmnote{display:block;font-size:12px;color:var(--muted)}
 .setlab{display:block;font-size:12px;color:var(--muted);margin:13px 0 7px}
 .setbtns{display:flex;gap:9px}
 .setb{flex:1 1 0;height:60px;border-radius:12px;cursor:pointer;border:2px solid var(--accent);
@@ -109,9 +121,6 @@ text-decoration:underline;padding:4px}
 <div class="timerbar"><div class="ti">
   <div class="tc"><div id="clock" aria-live="polite">0:00</div><div id="who"></div></div>
   <div class="tb">
-    <button type="button" data-t="90">1:30</button>
-    <button type="button" data-t="150">2:30</button>
-    <button type="button" data-t="300">5:00</button>
     <button type="button" class="stop" id="stopb">Stop</button>
   </div>
 </div></div>
@@ -120,7 +129,11 @@ text-decoration:underline;padding:4px}
 (function () {
   var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log', PEND_KEY = 'ledger_pending';
   var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
-  var shownDay = null, shownType = null, sent = {};
+  var shownDay = null, shownType = null, sent = {}, warmDone = {};
+  // Warm-up ramp, before the FIRST exercise of a session only. Source: 08-Johns-Routine.md,
+  // which follows the full-body-page version of Matthews' protocol. [reps, fraction, note]
+  var WARM = [[10, 0.5, 'easy'], [10, 0.5, 'faster'], [4, 0.7, '']], WARM_REST = 60;
+  function round5(x){ return Math.round(x/5)*5; }
   var root = document.getElementById('root'),
       navlab = document.getElementById('navlab'),
       statusEl = document.getElementById('status');
@@ -189,6 +202,22 @@ text-decoration:underline;padding:4px}
       var r = rec(S.d, name);
       var allOn = r.s.length === sets && r.s.every(function(x){ return x; });
       var mm = Math.floor(rest/60), ss = rest%60, rl = mm + ':' + (ss<10?'0':'') + ss;
+      var warm = '';
+      if (j === 0){
+        var wn = parseFloat(r.w), hasW = !isNaN(wn) && wn > 0;
+        warm = '<div class="warm"><span class="warmlab">' +
+          (hasW ? 'Warm-up first, off ' + esc(r.w) + ' lbs'
+                : 'Warm-up first. Enter your working weight above to see the loads.') + '</span>';
+        for (var q=0;q<WARM.length;q++){
+          var wq = WARM[q];
+          var lab = hasW ? wq[0] + ' \u00d7 ' + round5(wn*wq[1]) + ' lbs'
+                         : wq[0] + ' \u00d7 ' + Math.round(wq[1]*100) + '%';
+          warm += '<button class="warmb' + (warmDone[S.d+'|'+name+'|'+q] ? ' on' : '') +
+            '" type="button" data-wx="'+q+'">' + lab +
+            (wq[2] ? '<em>' + wq[2] + '</em>' : '<em></em>') + '</button>';
+        }
+        warm += '<span class="warmnote">Tap each one you finish. Rest 1:00 starts.</span></div>';
+      }
       var btns = '';
       for (var k=0;k<sets;k++)
         btns += '<button class="setb' + (r.s[k]?' on':'') + '" data-x="'+j+'" data-k="'+k+'" type="button">' + (k+1) + '</button>';
@@ -199,6 +228,7 @@ text-decoration:underline;padding:4px}
         '<input class="wt' + (r.w?' set':'') + '" type="text" inputmode="decimal" enterkeyhint="done" ' +
         'autocomplete="off" aria-label="' + esc(name) + ' weight" data-x="'+j+'" value="' + esc(r.w) + '"></label>' +
         '<button class="enter' + (r.w?' set':'') + '" type="button" data-x="'+j+'">' + (r.w?'Logged':'Enter') + '</button></div>' +
+        warm +
         '<span class="setlab">Tap the set you finished. Rest ' + rl + ' starts.</span>' +
         '<div class="setbtns">' + btns + '</div>' +
         '<a class="video" href="https://www.youtube.com/watch?v=' + vid + '" target="_blank" rel="noopener">&#9654; Watch form</a>' +
@@ -310,6 +340,13 @@ text-decoration:underline;padding:4px}
   root.addEventListener('click', function(ev){
     if (!P) return;
     var S = P.sessions[idx(view)]; if (!S) return; var D = P.days[S.t];
+    var wb = ev.target.closest('.warmb');
+    if (wb){
+      var wq2 = +wb.dataset.wx, wnm = D.ex[0][0], wkey = S.d+'|'+wnm+'|'+wq2;
+      warmDone[wkey] = !warmDone[wkey];
+      if (warmDone[wkey]) startTimer(WARM_REST, wnm + '  warm-up ' + (wq2+1));
+      render(); return;
+    }
     var en = ev.target.closest('.enter');
     if (en){
       var xi = +en.dataset.x, inp = root.querySelector('input.wt[data-x="'+xi+'"]');
@@ -379,8 +416,6 @@ text-decoration:underline;padding:4px}
       pull(false);
     }
   });
-  document.querySelectorAll('.tb button[data-t]').forEach(function(b){
-    b.addEventListener('click', function(){ startTimer(+b.dataset.t, ''); }); });
   document.getElementById('stopb').addEventListener('click', stopTimer);
 
   fetch('program.json').then(function(r){ return r.json(); }).then(function(p){
