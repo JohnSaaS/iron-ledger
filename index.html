@@ -117,9 +117,6 @@ text-decoration:underline;padding:4px}
     <div id="status">&nbsp;</div>
   </div>
   <main id="root"></main>
-  <div style="text-align:center;padding:8px 0 20px">
-    <button class="linkbtn" id="settings">Sheet connection</button>
-  </div>
 </div>
 
 <div class="timerbar"><div class="ti">
@@ -131,7 +128,17 @@ text-decoration:underline;padding:4px}
 
 <script>
 (function () {
-  var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log', PEND_KEY = 'ledger_pending';
+  var LOG_KEY = 'ledger_log', PEND_KEY = 'ledger_pending';
+  // Supabase Postgres. The publishable key is meant to ship in a client. The table
+  // allows select/insert/update to anon and deliberately withholds delete, and it
+  // lives in its own project so this key reaches nothing else.
+  var API = 'https://wikeqozoeravyduqjvhm.supabase.co/rest/v1/entries';
+  var KEY = 'sb_publishable_V3tX3AaJ2qM_o3hD7uvIdw_H9B7MyEt';
+  function hdrs(extra){
+    var h = { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' };
+    if (extra) for (var k in extra) h[k] = extra[k];
+    return h;
+  }
   var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
   var shownDay = null, shownType = null, sent = {}, warmDone = {}, lastDay = null;
   // Warm-up ramp, before the FIRST exercise of a session only. Source: 08-Johns-Routine.md,
@@ -142,11 +149,16 @@ text-decoration:underline;padding:4px}
       navlab = document.getElementById('navlab'),
       statusEl = document.getElementById('status');
 
-  function endpoint(){ try { return localStorage.getItem(EP_KEY) || ''; } catch(e){ return ''; } }
-  function setEndpoint(v){ try { localStorage.setItem(EP_KEY, v); } catch(e){} }
   function cacheLog(){ try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); } catch(e){} }
   function readCache(){ try { return JSON.parse(localStorage.getItem(LOG_KEY) || '{}'); } catch(e){ return {}; } }
-  function readPending(){ try { return JSON.parse(localStorage.getItem(PEND_KEY) || '[]'); } catch(e){ return []; } }
+  function readPending(){
+    try {
+      return JSON.parse(localStorage.getItem(PEND_KEY) || '[]').map(function(x){
+        if (x.date && !x.session_date){ x.session_date = x.date; delete x.date; }  // legacy queue
+        return x;
+      });
+    } catch(e){ return []; }
+  }
   function writePending(q){ try { localStorage.setItem(PEND_KEY, JSON.stringify(q)); } catch(e){} }
 
   function setStatus(msg, cls){ statusEl.textContent = msg || ' '; statusEl.className = cls || ''; }
@@ -178,32 +190,16 @@ text-decoration:underline;padding:4px}
     var inputs = root.querySelectorAll('input.wt');
     for (var i=0;i<inputs.length;i++){
       var xi = +inputs[i].dataset.x; if (!D.ex[xi]) continue;
+      if (!inputs[i].dataset.touched) continue;              // untouched box is not an edit
       var name = D.ex[xi][0], v = inputs[i].value.trim(), r = rec(shownDay, name);
       if (r.w !== v){ r.w = v; out.names.push(name); }
     }
     return out;
   }
 
-  function showSetup(){
-    shownDay = null;
-    root.innerHTML =
-      '<div class="setup"><h3>Connect your Sheet</h3>' +
-      '<p>Paste the web app URL from your tracker&#39;s Apps Script deployment. ' +
-      'It is stored on this device only, never in the site.</p>' +
-      '<input id="epin" type="url" inputmode="url" autocomplete="off" ' +
-      'placeholder="https://script.google.com/macros/s/..../exec" value="' + esc(endpoint()) + '">' +
-      '<button id="epsave" type="button">Save and connect</button></div>';
-    document.getElementById('epsave').addEventListener('click', function(){
-      var v = document.getElementById('epin').value.trim();
-      if (!v) { setStatus('Paste the /exec URL first','err'); return; }
-      setEndpoint(v); setStatus('Connecting...',''); pull(true);
-    });
-  }
-
   function render(){
     var carried = harvest();
     if (carried.names.length) cacheLog();
-    if (!endpoint()) { showSetup(); return; }
     var i = idx(view);
     if (i < 0) { shownDay = null; root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
     var S = P.sessions[i], D = P.days[S.t], h = '';
@@ -269,31 +265,35 @@ text-decoration:underline;padding:4px}
     for (var c=0;c<carried.names.length;c++) push(carried.day, carried.names[c]);
   }
 
+  function sendOne(item){
+    return fetch(API, {
+      method: 'POST',
+      headers: hdrs({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({
+        session_date: item.session_date, exercise: item.exercise,
+        weight: item.weight, sets: item.sets
+      })
+    }).then(function(res){
+      if (!res.ok) return res.text().then(function(t){ throw new Error('HTTP ' + res.status + ' ' + t.slice(0,60)); });
+    });
+  }
+
   function flushPending(){
-    var ep = endpoint(); if (!ep) return Promise.resolve();
     var q = readPending(); if (q.length === 0) return Promise.resolve();
     setStatus('Syncing offline changes...','');
     var p = Promise.resolve();
     q.forEach(function(item) {
       p = p.then(function() {
-        return fetch(ep, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(item)
-        }).then(function(res){ return res.json(); }).then(function(d){
-          if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'rejected');
+        return sendOne(item).then(function(){
           var nq = readPending();
-          // Remove the successfully sent item
-          var filtered = nq.filter(function(x) { return x.date !== item.date || x.exercise !== item.exercise || x.timestamp !== item.timestamp; });
-          writePending(filtered);
+          writePending(nq.filter(function(x) {
+            return x.session_date !== item.session_date || x.exercise !== item.exercise || x.timestamp !== item.timestamp;
+          }));
         });
       });
     });
-    return p.then(function(){
-      setStatus('Offline changes synced','ok');
-    }).catch(function(err){
-      setStatus('Could not sync offline changes','warn');
-    });
+    return p.then(function(){ setStatus('Offline changes synced','ok'); })
+            .catch(function(){ setStatus('Could not sync offline changes','warn'); });
   }
 
   function mergeLog(remoteLog) {
@@ -301,31 +301,36 @@ text-decoration:underline;padding:4px}
     LOG = remoteLog || {};
     // Apply pending offline edits on top of the remote state
     q.forEach(function(item) {
-      if(!LOG[item.date]) LOG[item.date]={};
-      LOG[item.date][item.exercise] = {w: item.weight, s: item.sets};
+      if(!LOG[item.session_date]) LOG[item.session_date]={};
+      LOG[item.session_date][item.exercise] = {w: item.weight, s: item.sets};
     });
     cacheLog();
   }
 
-  function pull(afterSetup){
-    var ep = endpoint();
-    if (!ep) { showSetup(); return; }
-    setStatus('Loading from Sheet...','');
-
-    // First try to flush any pending changes
+  function pull(){
+    setStatus('Loading...','');
     flushPending().then(function(){
-      return fetch(ep, { method:'GET' })
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-          if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'bad response');
-          mergeLog(d.log);
-          if (afterSetup) { view = nearest(todayISO()); }
-          render(); setStatus('Synced with Sheet','ok');
+      return fetch(API + '?select=session_date,exercise,weight,sets', { headers: hdrs() })
+        .then(function(r){
+          if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + ' ' + t.slice(0,60)); });
+          return r.json();
+        })
+        .then(function(rows){
+          var remote = {};
+          (rows || []).forEach(function(row){
+            if (!remote[row.session_date]) remote[row.session_date] = {};
+            remote[row.session_date][row.exercise] = {
+              w: row.weight == null ? '' : String(row.weight),
+              s: row.sets || []
+            };
+          });
+          mergeLog(remote);
+          render(); setStatus('Synced','ok');
         });
     }).catch(function(err){
       LOG = readCache();
       render();
-      setStatus('Sheet unreachable, using this device: ' + String(err.message||err).slice(0,40), 'warn');
+      setStatus('Offline, using this device: ' + String(err.message||err).slice(0,40), 'warn');
     });
   }
 
@@ -334,35 +339,24 @@ text-decoration:underline;padding:4px}
     var key = date + '|' + name, sig = r.w + '|' + r.s.join(',');
     if (sent[key] === sig) return;   // same payload as the last send for this row, nothing changed
     sent[key] = sig;
-    var item = { date: date, exercise: name, weight: r.w, sets: r.s, timestamp: Date.now() };
+    var item = { session_date: date, exercise: name, weight: r.w, sets: r.s, timestamp: Date.now() };
     var q = readPending();
-    // Overwrite existing pending item for this date/exercise if present
-    var idx = -1;
+    var idx2 = -1;
     for (var i=0; i<q.length; i++) {
-      if (q[i].date === date && q[i].exercise === name) { idx = i; break; }
+      if (q[i].session_date === date && q[i].exercise === name) { idx2 = i; break; }
     }
-    if (idx >= 0) q[idx] = item; else q.push(item);
+    if (idx2 >= 0) q[idx2] = item; else q.push(item);
     writePending(q);
 
-    var ep = endpoint(); if (!ep) return;
     setStatus('Saving...','');
-    fetch(ep, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ date: date, exercise: name, weight: r.w, sets: r.s })
-    })
-    .then(function(res){ return res.json(); })
-    .then(function(d){
-      if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'rejected');
-      // Remove from pending queue since it succeeded
+    sendOne(item).then(function(){
       var nq = readPending();
-      var filtered = nq.filter(function(x) { return x.date !== date || x.exercise !== name || x.timestamp !== item.timestamp; });
-      writePending(filtered);
-
+      writePending(nq.filter(function(x) {
+        return x.session_date !== date || x.exercise !== name || x.timestamp !== item.timestamp;
+      }));
       var t = new Date();
-      setStatus('Saved to Sheet ' + t.getHours() + ':' + String(t.getMinutes()).padStart(2,'0'), 'ok');
-    })
-    .catch(function(err){
+      setStatus('Saved ' + t.getHours() + ':' + String(t.getMinutes()).padStart(2,'0'), 'ok');
+    }).catch(function(){
       setStatus('Saved locally. Will sync later.', 'warn');
     });
   }
@@ -392,10 +386,14 @@ text-decoration:underline;padding:4px}
       cacheLog(); render(); push(S.d, e[0]);
     }
   });
+  root.addEventListener('input', function(ev){
+    if (ev.target && ev.target.classList && ev.target.classList.contains('wt')) ev.target.dataset.touched = '1';
+  });
   root.addEventListener('focusin', function(ev){
     var t = ev.target;
     if (t && t.classList && t.classList.contains('wt') && !t.value && t.dataset.prev){
       t.value = t.dataset.prev;
+      t.dataset.touched = '1';
       try { t.select(); } catch(e){}
     }
   });
@@ -412,7 +410,6 @@ text-decoration:underline;padding:4px}
   document.getElementById('prev').addEventListener('click', function(){ var i=idx(view); if(i>0) go(P.sessions[i-1].d); });
   document.getElementById('next').addEventListener('click', function(){ var i=idx(view); if(i<P.sessions.length-1) go(P.sessions[i+1].d); });
   document.getElementById('jump').addEventListener('click', function(){ go(nearest(todayISO())); });
-  document.getElementById('settings').addEventListener('click', showSetup);
 
   var clock = document.getElementById('clock'), who = document.getElementById('who');
   var endAt = null, fired = false, lock = null, ac = null, tlabel = '';
@@ -457,10 +454,8 @@ text-decoration:underline;padding:4px}
   window.addEventListener('pageshow', dayCheck);
   window.addEventListener('focus', tick); window.addEventListener('pageshow', tick);
   window.addEventListener('online', function(){
-    if (endpoint()) {
-      setStatus('Back online, syncing...','');
-      pull(false);
-    }
+    setStatus('Back online, syncing...','');
+    pull();
   });
   document.getElementById('stopb').addEventListener('click', stopTimer);
 
@@ -468,7 +463,7 @@ text-decoration:underline;padding:4px}
     P = p; view = nearest(todayISO()); LOG = readCache();
     mergeLog(LOG); // Ensure pending offline changes are applied on top of the cached log
     render();
-    if (endpoint()) pull(false); else setStatus('Not connected to your Sheet yet','warn');
+    pull();
   }).catch(function(err){
     root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--bad)">Could not load program.json</p>';
   });
