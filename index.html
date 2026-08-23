@@ -38,6 +38,9 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(-
 .s-date{margin:3px 0 0;color:var(--muted);font-size:15px}
 .deload{margin:11px 0 0;padding:10px 12px;border-radius:10px;font-size:14px;background:var(--soft);
 border:1px solid var(--line)}
+.notice{margin:0 0 12px;padding:11px 13px;border-radius:11px;font-size:15px;font-weight:600;
+background:var(--goodsoft);color:var(--good);border:1px solid var(--good)}
+.notice.soft{background:var(--soft);color:var(--accent);border-color:var(--accent);font-weight:600}
 .ex{background:var(--surface);border:1.5px solid var(--line);border-radius:15px;padding:14px;margin-bottom:12px}
 .ex.done{border-color:var(--good);background:var(--goodsoft)}
 .ex-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -130,7 +133,7 @@ text-decoration:underline;padding:4px}
 (function () {
   var EP_KEY = 'ledger_endpoint', LOG_KEY = 'ledger_log', PEND_KEY = 'ledger_pending';
   var P = null, LOG = {}, view = null, saveTimer = null, dirty = {};
-  var shownDay = null, shownType = null, sent = {}, warmDone = {};
+  var shownDay = null, shownType = null, sent = {}, warmDone = {}, lastDay = null;
   // Warm-up ramp, before the FIRST exercise of a session only. Source: 08-Johns-Routine.md,
   // which follows the full-body-page version of Matthews' protocol. [reps, fraction, note]
   var WARM = [[10, 0.5, 'easy'], [10, 0.5, 'faster'], [4, 0.7, '']], WARM_REST = 60;
@@ -163,6 +166,7 @@ text-decoration:underline;padding:4px}
     }
     return best;
   }
+  function setCount(S, e){ return S.dl ? Math.max(1, Math.round(e[1]/2)) : e[1]; }
   function rec(d,n){ if(!LOG[d]) LOG[d]={}; if(!LOG[d][n]) LOG[d][n]={w:'',s:[]}; return LOG[d][n]; }
 
   // The DOM is rebuilt wholesale on every render, so anything typed into a weight
@@ -204,11 +208,25 @@ text-decoration:underline;padding:4px}
     if (i < 0) { shownDay = null; root.innerHTML = '<p style="padding:36px 0;text-align:center;color:var(--muted)">No session.</p>'; return; }
     var S = P.sessions[i], D = P.days[S.t], h = '';
     navlab.textContent = S.t + ' · ' + S.lab;
+
+    var today = todayISO(), lastS = P.sessions[P.sessions.length-1], notice = '';
+    lastDay = today;
+    if (today > lastS.d){
+      notice += '<p class="notice">Program finished. The last session was ' + esc(lastS.lng) + '.</p>';
+    } else if (idx(today) < 0 && S.d === nearest(today)){
+      notice += '<p class="notice">Today is a rest day. Nothing to lift. Your next session is below.</p>';
+    }
+    var soon = null;
+    for (var z=0;z<P.sessions.length;z++){ if (P.sessions[z].dl && P.sessions[z].d > S.d){ soon = P.sessions[z]; break; } }
+    if (!S.dl && soon && (Date.parse(soon.d) - Date.parse(S.d)) / 86400000 <= 9){
+      notice += '<p class="notice soft">Deload week starts ' + esc(soon.lab) + '.</p>';
+    }
+    h += notice;
     h += '<header class="s-head"><p class="s-eyebrow">Week ' + S.w + (S.dl ? ' · deload' : '') +
          ' · ' + esc(D.loc) + '</p><h2>' + S.t + '</h2><p class="s-date">' + esc(S.lng) + '</p>' +
-         (S.dl ? '<p class="deload">Deload: same weight, half the sets, 2 to 4 fewer reps.</p>' : '') + '</header>';
+         (S.dl ? '<p class="deload">Deload week. The sets below are already cut for you. Keep the same weight you have been using, and stop 2 to 4 reps earlier than you normally would.</p>' : '') + '</header>';
     for (var j=0;j<D.ex.length;j++){
-      var e = D.ex[j], name=e[0], sets=e[1], reps=e[2], rest=e[3], vid=e[4], cue=e[5];
+      var e = D.ex[j], name=e[0], sets=setCount(S, e), reps=e[2], rest=e[3], vid=e[4], cue=e[5];
       var r = rec(S.d, name);
       var allOn = r.s.length === sets && r.s.every(function(x){ return x; });
       var mm = Math.floor(rest/60), ss = rest%60, rl = mm + ':' + (ss<10?'0':'') + ss;
@@ -368,7 +386,7 @@ text-decoration:underline;padding:4px}
     var sb = ev.target.closest('.setb');
     if (sb){
       var x = +sb.dataset.x, k = +sb.dataset.k, e = D.ex[x], r = rec(S.d, e[0]);
-      while (r.s.length < e[1]) r.s.push(0);
+      while (r.s.length < setCount(S, e)) r.s.push(0);
       r.s[k] = r.s[k] ? 0 : 1;
       if (r.s[k]) startTimer(e[3], e[0] + '  set ' + (k+1));
       cacheLog(); render(); push(S.d, e[0]);
@@ -427,7 +445,16 @@ text-decoration:underline;padding:4px}
     clock.textContent = '0:00'; clock.className = ''; who.textContent = '';
     try { if (lock){ lock.release(); lock = null; } } catch(e){} }
   setInterval(tick, 250);
-  document.addEventListener('visibilitychange', function(){ if (!document.hidden){ tick(); if (endAt!==null) wake(); } });
+  function dayCheck(){
+    if (!P || lastDay === null) return;
+    var t = todayISO();
+    if (t === lastDay) return;
+    if (view === nearest(lastDay)) view = nearest(t);   // only re-anchor if you were on 'today'
+    render();
+  }
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden){ dayCheck(); tick(); if (endAt!==null) wake(); } });
+  window.addEventListener('focus', dayCheck);
+  window.addEventListener('pageshow', dayCheck);
   window.addEventListener('focus', tick); window.addEventListener('pageshow', tick);
   window.addEventListener('online', function(){
     if (endpoint()) {
