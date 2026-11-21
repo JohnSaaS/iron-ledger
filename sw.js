@@ -4,6 +4,7 @@ const ASSETS = [
   './index.html',
   './program.json',
   './icon.svg',
+  './apple-touch-icon.png',
   './manifest.json'
 ];
 
