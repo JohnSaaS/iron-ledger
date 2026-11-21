@@ -447,18 +447,25 @@ text-decoration:underline;padding:4px}
   function keyBytes(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while (s.length % 4) s += '=';
     var r = atob(s), a = new Uint8Array(r.length); for (var i=0;i<r.length;i++) a[i] = r.charCodeAt(i); return a; }
   function schedulePush(sec, name){
+    // Debug readout in the status line until push is proven on the phone.
+    function dbg(m){ try { setStatus('Alert: ' + m, ''); } catch(e){} }
     try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !window.Notification ||
-          Notification.permission !== 'granted') return;
+      var sa = (navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)) ? 'app' : 'browser tab';
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !window.Notification)
+        return dbg('no push here (' + sa + '). Open from the Home Screen icon.');
+      if (Notification.permission !== 'granted') return dbg('notifications ' + Notification.permission + ' (' + sa + ')');
+      dbg('subscribing...');
       navigator.serviceWorker.ready.then(function(reg){
         return reg.pushManager.getSubscription().then(function(sub){
           return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUB) });
         });
       }).then(function(sub){
+        dbg('subscribed, asking server...');
         return fetch(PUSH_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sub: sub.toJSON(), delay: Math.min(sec, 140), title: 'Rest over', body: name || 'Back to work.' }) });
-      }).then(function(r){ console.log('rest-push', r.status); }).catch(function(e){ console.log('rest-push failed', e); });
-    } catch(e){}
+      }).then(function(r){ return r.text().then(function(t){ dbg('server ' + r.status + ' ' + t.slice(0,60)); }); })
+        .catch(function(e){ dbg('failed: ' + (e && e.message || e)); });
+    } catch(e){ dbg('error: ' + (e && e.message || e)); }
   }
   function startTimer(sec, name){
     try {
