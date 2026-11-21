@@ -440,8 +440,33 @@ text-decoration:underline;padding:4px}
   function ding(){ beep(); if (navigator.vibrate) navigator.vibrate([200,100,200,100,300]);
     try { if (window.Notification && Notification.permission === 'granted')
       new Notification('Rest over', { body: tlabel || 'Back to work.' }); } catch(e){} }
+  // Web Push so the alert still arrives when the phone is locked. The rest-push function
+  // (Supabase) sends it at the end time. Public key only; the private key lives in Supabase.
+  var VAPID_PUB = 'BI_kc2Dk8Ey495IEqmgnHE8ORoUVLE1OrHNWouvy3EcnA9gXJKSnhS9hKbKYcHKtveiHilMOSvxsogczgJ64fro';
+  var PUSH_FN = 'https://wikeqozoeravyduqjvhm.supabase.co/functions/v1/rest-push';
+  function keyBytes(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while (s.length % 4) s += '=';
+    var r = atob(s), a = new Uint8Array(r.length); for (var i=0;i<r.length;i++) a[i] = r.charCodeAt(i); return a; }
+  function schedulePush(sec, name){
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !window.Notification ||
+          Notification.permission !== 'granted') return;
+      navigator.serviceWorker.ready.then(function(reg){
+        return reg.pushManager.getSubscription().then(function(sub){
+          return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUB) });
+        });
+      }).then(function(sub){
+        return fetch(PUSH_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sub: sub.toJSON(), delay: Math.min(sec, 140), title: 'Rest over', body: name || 'Back to work.' }) });
+      }).then(function(r){ console.log('rest-push', r.status); }).catch(function(e){ console.log('rest-push failed', e); });
+    } catch(e){}
+  }
   function startTimer(sec, name){
-    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch(e){}
+    try {
+      if (window.Notification && Notification.permission === 'default') {
+        var rp = Notification.requestPermission(function(){});
+        if (rp && rp.then) rp.then(function(){ schedulePush(sec, name); });
+      } else schedulePush(sec, name);
+    } catch(e){}
     endAt = Date.now() + sec*1000; fired = false; tlabel = name || '';
     who.textContent = tlabel; wake(); unlock(); tick(); }
   function stopTimer(){ endAt = null; fired = false; tlabel = '';
