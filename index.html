@@ -460,10 +460,13 @@ text-decoration:underline;padding:4px}
           return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUB) });
         });
       }).then(function(sub){
-        dbg('subscribed, asking server...');
-        return fetch(PUSH_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sub: sub.toJSON(), delay: Math.min(sec, 140), title: 'Rest over', body: name || 'Back to work.' }) });
-      }).then(function(r){ return r.text().then(function(t){ dbg('server ' + r.status + ' ' + t.slice(0,60)); }); })
+        dbg('subscribed, testing...');
+        var post = function(o){ return fetch(PUSH_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }); };
+        return post({ sub: sub.toJSON(), sync: true }).then(function(r){ return r.text(); }).then(function(t){
+          return post({ sub: sub.toJSON(), delay: Math.min(sec, 140), title: 'Rest over', body: name || 'Back to work.' })
+            .then(function(r){ dbg('now-push ' + t.slice(0,90) + ' | timer ' + r.status); });
+        });
+      })
         .catch(function(e){ dbg('failed: ' + (e && e.message || e)); });
     } catch(e){ dbg('error: ' + (e && e.message || e)); }
   }

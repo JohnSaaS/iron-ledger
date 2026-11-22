@@ -29,6 +29,14 @@ Deno.serve(async (req) => {
   try { const u = new URL(sub.endpoint); if (u.protocol !== "https:") throw 0; host = u.hostname; }
   catch { return json({ error: "bad endpoint" }, 400); }
   if (!ALLOWED.some((s) => host.endsWith(s))) return json({ error: "endpoint host not allowed" }, 400);
+  if (b.sync === true) {  // debug: send now and report the push service's answer
+    try {
+      const r = await webpush.sendNotification(sub, JSON.stringify({ title: "Push test", body: "Sent immediately." }), { TTL: 60, urgency: "high" });
+      return json({ sync: true, status: r.statusCode });
+    } catch (e) {
+      return json({ sync: true, status: (e as any)?.statusCode, body: String((e as any)?.body || e).slice(0, 200) });
+    }
+  }
   if (!(delay >= 1 && delay <= MAX_DELAY)) return json({ error: "delay must be 1.." + MAX_DELAY }, 400);
 
   const payload = JSON.stringify({
